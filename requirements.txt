@@ -3,6 +3,6 @@ pandas==2.1.4
 numpy==1.26.4
 ibm-watsonx-ai==1.2.8
 torch==2.2.0
-transformers==4.38.1
+transformers
 matplotlib==3.8.3
 seaborn==0.13.2

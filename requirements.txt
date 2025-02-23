@@ -1,0 +1,7 @@
+streamlit
+pandas
+ibm-watsonx-ai
+torch
+transformers
+matplotlib
+seaborn

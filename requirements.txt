@@ -1,7 +1,8 @@
-streamlit
-pandas
-ibm-watsonx-ai
-torch
-transformers
-matplotlib
-seaborn
+streamlit==1.31.0
+pandas==2.2.0
+numpy==1.26.4
+ibm-watsonx-ai==1.0.0
+torch==2.2.0
+transformers==4.38.1
+matplotlib==3.8.3
+seaborn==0.13.2

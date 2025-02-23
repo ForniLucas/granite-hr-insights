@@ -9,7 +9,7 @@ import math
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-# Initial Configuration
+
 warnings.filterwarnings('ignore')
 import transformers
 transformers.logging.set_verbosity_error()
@@ -26,6 +26,15 @@ def load_guardian_model():
         st.write("Model loaded successfully.")
     return st.session_state.guardian_model, st.session_state.guardian_tokenizer
 
+if 'model_loaded' not in st.session_state:
+    guardian_model, guardian_tokenizer = load_guardian_model()
+    st.session_state.model_loaded = True
+else:
+    guardian_model, guardian_tokenizer = st.session_state.guardian_model, st.session_state.guardian_tokenizer
+
+safe_token = "No"
+unsafe_token = "Yes"
+
 
 def parse_output(output, input_len):
     label, prob_of_risk = None, None
@@ -35,11 +44,11 @@ def parse_output(output, input_len):
         if list_index_logprobs_i:
             prob = get_probablities(list_index_logprobs_i)
             prob_of_risk = prob[1]
-    res = st.session_state.guardian_tokenizer.decode(output.sequences[:, input_len:][0], skip_special_tokens=True).strip()
-    if "Yes".lower() == res.lower():
-        label = "Yes"
-    elif "No".lower() == res.lower():
-        label = "No"
+    res = guardian_tokenizer.decode(output.sequences[:, input_len:][0], skip_special_tokens=True).strip()
+    if unsafe_token.lower() == res.lower():
+        label = unsafe_token
+    elif safe_token.lower() == res.lower():
+        label = safe_token
     else:
         label = "Failed"
     return label, prob_of_risk.item() if prob_of_risk is not None else 0.0
@@ -49,10 +58,10 @@ def get_probablities(logprobs):
     unsafe_token_prob = 1e-50
     for gen_token_i in logprobs:
         for logprob, index in zip(gen_token_i.values.tolist()[0], gen_token_i.indices.tolist()[0]):
-            decoded_token = st.session_state.guardian_tokenizer.convert_ids_to_tokens(index)
-            if decoded_token.strip().lower() == "no":
+            decoded_token = guardian_tokenizer.convert_ids_to_tokens(index)
+            if decoded_token.strip().lower() == safe_token.lower():
                 safe_token_prob += math.exp(logprob)
-            if decoded_token.strip().lower() == "yes":
+            if decoded_token.strip().lower() == unsafe_token.lower():
                 unsafe_token_prob += math.exp(logprob)
     probabilities = torch.softmax(
         torch.tensor([math.log(safe_token_prob), math.log(unsafe_token_prob)]), dim=0
@@ -60,15 +69,12 @@ def get_probablities(logprobs):
     return probabilities
 
 def detect_risk(text, risk_type="social bias"):
-    if 'guardian_model' not in st.session_state or 'guardian_tokenizer' not in st.session_state:
-        load_guardian_model()
     messages = [{"role": "system", "content": f"Detect {risk_type} in the following text."}, {"role": "user", "content": text}]
-    input_ids = st.session_state.guardian_tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt").to(torch.device("cpu"))
+    input_ids = guardian_tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt").to(torch.device("cpu"))
     with torch.no_grad():
-        output = st.session_state.guardian_model.generate(input_ids, do_sample=False, max_new_tokens=20, return_dict_in_generate=True, output_scores=True)
+        output = guardian_model.generate(input_ids, do_sample=False, max_new_tokens=20, return_dict_in_generate=True, output_scores=True)
     label, prob_of_risk = parse_output(output, input_ids.shape[1])
     return label == "Yes", prob_of_risk
-
 
 def generate_employee_description(row, report_model):
     satisfaction = row["SatisfactionScore"] * 20
@@ -115,14 +121,18 @@ def generate_department_report(df, department, report_model):
 
 
 def main_page():
+    # Logo and title in columns
     col1, col2 = st.columns([1, 5])
     with col1:
-        st.image("R.png", width=100)
+        st.image("R.png", width=100)  # Small logo
     with col2:
         st.title("Granite - HR Performance")
 
+    # Container for API credentials input
     with st.container(border=True):
         st.subheader("Enter IBM WatsonX Credentials")
+        
+        # Verificar si las credenciales ya están en session_state
         if 'api_key' not in st.session_state or 'project_id' not in st.session_state:
             api_key = st.text_input("API Key", type="password", value="")
             project_id = st.text_input("Project ID", value="")
@@ -144,6 +154,7 @@ def main_page():
                 else:
                     st.warning("Please enter both API Key and Project ID.")
         else:
+            # Si ya están en session_state, usarlas directamente
             st.write("Credentials already provided.")
             if 'report_model' not in st.session_state:
                 try:
@@ -160,8 +171,10 @@ def main_page():
                     del st.session_state.project_id
                     st.rerun()
 
+
     if 'report_model' not in st.session_state:
         return
+
 
     with st.container(border=True):
         st.subheader("Load Data")
@@ -195,6 +208,7 @@ def main_page():
         df = st.session_state.df
         report_model = st.session_state.report_model
         
+
         with st.container(border=True):
             st.subheader("Individual Report")
             employee_ids = df["EmployeeID"].tolist()
@@ -204,6 +218,7 @@ def main_page():
                 st.session_state.page = "individual_report"
                 st.rerun()
         
+
         with st.container(border=True):
             st.subheader("Department Manager Report")
             departments = df["Department"].unique().tolist()
@@ -213,6 +228,7 @@ def main_page():
                 st.session_state.page = "department_report"
                 st.rerun()
     
+
     with st.container(border=True):
         st.write("""
         ### Instructions:
@@ -291,7 +307,7 @@ def department_report_page():
     dept_report = generate_department_report(df, selected_department, report_model)
     st.write(dept_report)
     
-
+    # Visualizations
     st.write("### Department Visualizations")
     dept_data = df[df["Department"] == selected_department]
     
